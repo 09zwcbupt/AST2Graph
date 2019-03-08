@@ -41,3 +41,37 @@ while queue:
          edges.append( [ parentId, childId ] )
    else:
       assert not childCount( node ), "node should be in childTree"
+
+# generate id to node name list
+nodeNames = []
+for node in nodeToId:
+   index = nodeToId[ node ]
+   name = str( type( node ) )
+
+   # Variables
+   if isinstance( node, ast.Name ):
+      name += " " + node.id
+   elif isinstance( node, ast.Num ):
+      name += " " + str( node.n )
+   elif isinstance( node, ast.Str ) or \
+        isinstance( node, ast.Bytes ):
+      name += " " + node.s
+
+   # Expressions
+   elif isinstance( node, ast.UAdd ) or \
+        isinstance( node, ast.Add ):
+      name += " +"
+   elif isinstance( node, ast.USub ) or \
+        isinstance( node, ast.Sub ):
+      name += " -"
+   elif isinstance( node, ast.Mult ):
+      name += " *"
+   elif isinstance( node, ast.Div ):
+      name += " /"
+   elif isinstance( node, ast.FloorDiv ):
+      name += " FloorDiv"
+   elif isinstance( node, ast.Not ):
+      name += " !"
+   elif isinstance( node, ast.Invert ):
+      name += " ~"
+   nodeNames.append( [ index, name ] )
