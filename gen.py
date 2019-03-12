@@ -1,3 +1,4 @@
+from unparser import Unparser
 import utils
 import ast
 
@@ -75,3 +76,11 @@ for node in nodeToId:
    elif isinstance( node, ast.Invert ):
       name += " ~"
    nodeNames.append( [ index, name ] )
+import pdb
+import astunparse
+source = astunparse.unparse(tree)
+pdb.set_trace()
+
+from six.moves import cStringIO
+v = cStringIO()
+Unparser( tree, file=v )
