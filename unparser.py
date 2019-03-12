@@ -6,6 +6,7 @@ import ast
 import os
 import tokenize
 from six import StringIO
+import pdb
 
 # Large float and imaginary literals get turned into infinities in the AST.
 # We unparse those infinities to INFSTR.
@@ -36,10 +37,10 @@ class tokenElem:
         self.startOfLine = startOfLine
         self.endOfLine = endOfLine
 
-    def __str__():
+    def __str__( self ):
         indent = "    " * self.indentLebel if self.startOfLine else ""
         endOfToken = "\n" if self.endOfLine else ""
-        token = indent + " ".join( self.text ) + endOfToken
+        token = indent + "".join( self.text ) + endOfToken
         return token
 
 class Unparser:
@@ -52,14 +53,25 @@ class Unparser:
          Print the source for tree to file."""
         # array, each elem is a separate entry
         self.tokenLL = []
-        self.prevNode = None
+        self.prevToken = None
 
-        #self.f = file
+        self.f = file
         self.future_imports = []
         self._indent = 0
         self.dispatch(tree)
         #print("", file=self.f)
         #self.f.flush()
+
+    def addNextToken( self, node, text ):
+        prevId = -1
+        if self.prevToken:
+            # first update the nextId to the curr node
+            self.prevToken.nextId = node.nodeId
+            prevId = self.prevToken.key.nodeId
+        # todo: how to check start/end of line?
+        nextToken = tokenElem( node, prevId, -1, text, node.col_offset, False, False )
+        self.tokenLL.append( nextToken )
+        self.prevToken = nextToken
 
     def fill(self, text = ""):
         "Indent a piece of text, according to the current indentation level"
@@ -85,7 +97,9 @@ class Unparser:
                 self.dispatch(t)
             return
         meth = getattr(self, "_"+tree.__class__.__name__)
-        meth(tree)
+        text = meth(tree)
+        #print( text )
+        #return text
 
 
     ############### Unparsing methods ######################
@@ -108,79 +122,107 @@ class Unparser:
 
     # stmt
     def _Expr(self, tree):
-        self.fill()
+        #self.fill()
         self.dispatch(tree.value)
 
     def _Import(self, t):
-        self.fill("import ")
-        interleave(lambda: self.write(", "), self.dispatch, t.names)
+        #self.fill( "import" )
+        self.addNextToken( t, "import" )
+        #pdb.set_trace()
+        interleave(lambda: ", ", self.dispatch, t.names)
 
     def _ImportFrom(self, t):
         # A from __future__ import may affect unparsing, so record it.
         if t.module and t.module == '__future__':
             self.future_imports.extend(n.name for n in t.names)
 
-        self.fill("from ")
-        self.write("." * t.level)
+        tokenText = "from " + "." * t.level
+        #self.fill("from ")
+        #self.write("." * t.level)
         if t.module:
-            self.write(t.module)
-        self.write(" import ")
-        interleave(lambda: self.write(", "), self.dispatch, t.names)
+            tokenText += t.module
+            #self.write(t.module)
+        tokenText += " import "
+        #self.write(" import ")
+        self.addNextToken( t, tokenText )
+        interleave(lambda: ", ", self.dispatch, t.names)
 
     def _Assign(self, t):
-        self.fill()
+        #self.fill()
+        tokenText = ""
         for target in t.targets:
+            # left hand side, there should be only one obj?
             self.dispatch(target)
-            self.write(" = ")
+            tokenText += " = "
+            self.addNextToken( t, tokenText )
+            #self.write(" = ")
+        # right hand side
         self.dispatch(t.value)
 
     def _AugAssign(self, t):
-        self.fill()
+        #self.fill()
+        # first dispatch left hand side
         self.dispatch(t.target)
-        self.write(" "+self.binop[t.op.__class__.__name__]+"= ")
-        self.dispatch(t.value)
+        #self.write(" "+self.binop[t.op.__class__.__name__]+"= ")
+        tokenText = " "+self.binop[t.op.__class__.__name__]+"= " 
+        self.addNextToken( t, tokenText )
+        tokenText += self.dispatch(t.value)
 
     def _AnnAssign(self, t):
-        self.fill()
+        #self.fill()
+        tokenText = ""
         if not t.simple:
-            self.write("(")
-        self.dispatch(t.target)
+            tokenText += "("
+            #self.write("(")
+        tokenText += self.dispatch(t.target)
         if not t.simple:
-            self.write(")")
-        self.write(": ")
-        self.dispatch(t.annotation)
+            tokenText += ")"
+            #self.write(")")
+        #self.write(": ")
+        tokenText += ": "
+        tokenText += self.dispatch(t.annotation)
+        self.addNextToken( t, "=" )
         if t.value:
-            self.write(" = ")
-            self.dispatch(t.value)
+            #self.write(" = ")
+            tokenText += sef.dispatch(t.value)
 
     def _Return(self, t):
-        self.fill("return")
+        #self.fill("return")
+        tokenText = "return"
+        self.addNextToken( t, tokenText )
         if t.value:
-            self.write(" ")
+            #self.write(" ")
             self.dispatch(t.value)
 
     def _Pass(self, t):
-        self.fill("pass")
+        #self.fill("pass")
+        self.addNextToken( t, "pass" )
 
     def _Break(self, t):
-        self.fill("break")
+        #self.fill("break")
+        self.addNextToken( t, "break" )
 
     def _Continue(self, t):
         self.fill("continue")
+        self.addNextToken( t, "continue" )
 
     def _Delete(self, t):
-        self.fill("del ")
-        interleave(lambda: self.write(", "), self.dispatch, t.targets)
+        #self.fill("del ")
+        tokenText = "del "
+        self.addNextToken( t, tokenText )
+        interleave(lambda: ", ", self.dispatch, t.targets)
 
     def _Assert(self, t):
-        self.fill("assert ")
+        #self.fill("assert ")
+        self.addNextToken( t, "assert" )
         self.dispatch(t.test)
         if t.msg:
             self.write(", ")
             self.dispatch(t.msg)
 
     def _Exec(self, t):
-        self.fill("exec ")
+        #self.fill("exec ")
+        self.addNextToken( t, "exec " )
         self.dispatch(t.body)
         if t.globals:
             self.write(" in ")
@@ -190,7 +232,8 @@ class Unparser:
             self.dispatch(t.locals)
 
     def _Print(self, t):
-        self.fill("print ")
+        #self.fill("print ")
+        self.addNextToken( t, "print " )
         do_comma = False
         if t.dest:
             self.write(">>")
@@ -204,31 +247,36 @@ class Unparser:
             self.write(",")
 
     def _Global(self, t):
-        self.fill("global ")
+        #self.fill("global ")
+        self.addNextToken( t, "global" )
         interleave(lambda: self.write(", "), self.write, t.names)
 
     def _Nonlocal(self, t):
-        self.fill("nonlocal ")
+        #self.fill("nonlocal ")
+        self.addNextToken( t, "nonlocal " )
         interleave(lambda: self.write(", "), self.write, t.names)
 
     def _Yield(self, t):
-        self.write("(")
-        self.write("yield")
+        #self.write("(")
+        #self.write("yield")
+        self.addNextToken( t, "yield" )
         if t.value:
             self.write(" ")
             self.dispatch(t.value)
-        self.write(")")
+        #self.write(")")
 
     def _YieldFrom(self, t):
-        self.write("(")
-        self.write("yield from")
+        #self.write("(")
+        #self.write("yield from")
+        self.addNextToken( t, "yield from" )
         if t.value:
-            self.write(" ")
+            #self.write(" ")
             self.dispatch(t.value)
-        self.write(")")
+        #self.write(")")
 
     def _Raise(self, t):
-        self.fill("raise")
+        #self.fill("raise")
+        self.addNextToken( t, "raise" )
         if six.PY3:
             if not t.exc:
                 assert not t.cause
@@ -248,9 +296,14 @@ class Unparser:
             if t.tback:
                 self.write(", ")
                 self.dispatch(t.tback)
+        #self.addNextToken( t, tokenText )
 
+    # taking an easy approach, instead of considering "else"
+    # and "finally" as separate token, we only process the
+    # first "try" token, and connects later statements.
     def _Try(self, t):
-        self.fill("try")
+        #self.fill("try")
+        self.addNextToken( t, "try" )
         self.enter()
         self.dispatch(t.body)
         self.leave()
@@ -268,7 +321,8 @@ class Unparser:
             self.leave()
 
     def _TryExcept(self, t):
-        self.fill("try")
+        #self.fill("try")
+        self.addNextToken( t, "try" )
         self.enter()
         self.dispatch(t.body)
         self.leave()
@@ -281,12 +335,14 @@ class Unparser:
             self.dispatch(t.orelse)
             self.leave()
 
+    # TODO: check if correct
     def _TryFinally(self, t):
         if len(t.body) == 1 and isinstance(t.body[0], ast.TryExcept):
             # try-except-finally
             self.dispatch(t.body)
         else:
-            self.fill("try")
+            #self.fill("try")
+            self.addNextToken( t, "try" )
             self.enter()
             self.dispatch(t.body)
             self.leave()
@@ -297,7 +353,8 @@ class Unparser:
         self.leave()
 
     def _ExceptHandler(self, t):
-        self.fill("except")
+        #self.fill("except")
+        self.addNextToken( t, "except" )
         if t.type:
             self.write(" ")
             self.dispatch(t.type)
@@ -312,11 +369,12 @@ class Unparser:
         self.leave()
 
     def _ClassDef(self, t):
-        self.write("\n")
+        #self.write("\n")
         for deco in t.decorator_list:
             self.fill("@")
             self.dispatch(deco)
         self.fill("class "+t.name)
+        self.addNextToken( t, "class" )
         if six.PY3:
             self.write("(")
             comma = False
@@ -355,7 +413,9 @@ class Unparser:
         for deco in t.decorator_list:
             self.fill("@")
             self.dispatch(deco)
-        self.fill(("async " if async_ else "") + "def " + t.name + "(")
+        #self.fill(("async " if async_ else "") + "def " + t.name + "(")
+        tokenText = ("async " if async_ else "") + "def " + t.name + "("
+        self.addNextToken( t, tokenText )
         self.dispatch(t.args)
         self.write(")")
         if getattr(t, "returns", False):
@@ -372,7 +432,9 @@ class Unparser:
         self._generic_FunctionDef(t, async_=True)
 
     def _generic_For(self, t, async_=False):
-        self.fill("async for " if async_ else "for ")
+        # self.fill("async for " if async_ else "for ")
+        tokenText = "async for " if async_ else "for "
+        self.addNextToken( t, tokenText )
         self.dispatch(t.target)
         self.write(" in ")
         self.dispatch(t.iter)
@@ -392,7 +454,8 @@ class Unparser:
         self._generic_For(t, async_=True)
 
     def _If(self, t):
-        self.fill("if ")
+        #self.fill("if ")
+        self.addNextToken( t, "if " )
         self.dispatch(t.test)
         self.enter()
         self.dispatch(t.body)
@@ -414,7 +477,8 @@ class Unparser:
             self.leave()
 
     def _While(self, t):
-        self.fill("while ")
+        #self.fill("while ")
+        self.addNextToken( t, "while" )
         self.dispatch(t.test)
         self.enter()
         self.dispatch(t.body)
@@ -426,7 +490,9 @@ class Unparser:
             self.leave()
 
     def _generic_With(self, t, async_=False):
-        self.fill("async with " if async_ else "with ")
+        #self.fill("async with " if async_ else "with ")
+        tokenText = "async with " if async_ else "with "
+        self.addNextToken( t, tokenText )
         if hasattr(t, 'items'):
             interleave(lambda: self.write(", "), self.dispatch, t.items)
         else:
@@ -450,23 +516,27 @@ class Unparser:
 
     def _Str(self, tree):
         if six.PY3:
-            self.write(repr(tree.s))
+            #self.write(repr(tree.s))
+            self.addNextToken( tree, repr( tree.s ) )
         else:
             # if from __future__ import unicode_literals is in effect,
             # then we want to output string literals using a 'b' prefix
             # and unicode literals with no prefix.
             if "unicode_literals" not in self.future_imports:
-                self.write(repr(tree.s))
+                #self.write(repr(tree.s))
+                self.addNextToken( tree, repr(tree.s) )
             elif isinstance(tree.s, str):
-                self.write("b" + repr(tree.s))
+                #self.write("b" + repr(tree.s))
+                self.addNextToken( tree, "b" + repr(tree.s) )
             elif isinstance(tree.s, unicode):
-                self.write(repr(tree.s).lstrip("u"))
+                #self.write(repr(tree.s).lstrip("u"))
+                self.addNextToken( tree, repr(tree.s).lstrip("u") )
             else:
                 assert False, "shouldn't get here"
 
     def _JoinedStr(self, t):
         # JoinedStr(expr* values)
-        self.write("f")
+        #self.write("f")
         string = StringIO()
         self._fstring_JoinedStr(t, string.write)
         # Deviation from `unparse.py`: Try to find an unused quote.
@@ -482,14 +552,16 @@ class Unparser:
                 break
         else:
             v = repr(v)
+        self.addNextToken( t, "f"+v )
         self.write(v)
 
     def _FormattedValue(self, t):
         # FormattedValue(expr value, int? conversion, expr? format_spec)
-        self.write("f")
+        #self.write("f")
         string = StringIO()
         self._fstring_JoinedStr(t, string.write)
-        self.write(repr(string.getvalue()))
+        #self.write(repr(string.getvalue()))
+        self.addNextToken( t, "f"+repr(string.getvalue()) )
 
     def _fstring_JoinedStr(self, t, write):
         for value in t.values:
@@ -498,37 +570,49 @@ class Unparser:
 
     def _fstring_Str(self, t, write):
         value = t.s.replace("{", "{{").replace("}", "}}")
-        write(value)
+        self.addNextToken( t, "value" )
+        #write(value)
 
     def _fstring_Constant(self, t, write):
         assert isinstance(t.value, str)
         value = t.value.replace("{", "{{").replace("}", "}}")
-        write(value)
+        self.addNextToken( t, value )
+        #write(value)
 
+    # TODO: this is probably broken :(
     def _fstring_FormattedValue(self, t, write):
-        write("{")
+        #write("{")
+        tokenText = "{"
         expr = StringIO()
         Unparser(t.value, expr)
         expr = expr.getvalue().rstrip("\n")
         if expr.startswith("{"):
-            write(" ")  # Separate pair of opening brackets as "{ {"
-        write(expr)
+            #write(" ")  # Separate pair of opening brackets as "{ {"
+            tokenText += " "
+        #write(expr)
+        tokenText += expr
         if t.conversion != -1:
             conversion = chr(t.conversion)
             assert conversion in "sra"
-            write("!{conversion}".format(conversion=conversion))
+            #write("!{conversion}".format(conversion=conversion))
+            tokenText += "!{conversion}".format(conversion=conversion)
         if t.format_spec:
-            write(":")
+            #write(":")
+            tokenText += ":"
             meth = getattr(self, "_fstring_" + type(t.format_spec).__name__)
             meth(t.format_spec, write)
-        write("}")
+        #write("}")
+        tokenText = "{"
 
     def _Name(self, t):
-        self.write(t.id)
+        #self.write(t.id)
+        self.addNextToken( t, t.id )
 
     def _NameConstant(self, t):
-        self.write(repr(t.value))
+        #self.write(repr(t.value))
+        self.addNextToken( t, repr( t.value ) )
 
+    # TODO: ?
     def _Repr(self, t):
         self.write("`")
         self.dispatch(t.value)
@@ -559,25 +643,33 @@ class Unparser:
     def _Num(self, t):
         repr_n = repr(t.n)
         if six.PY3:
-            self.write(repr_n.replace("inf", INFSTR))
+            #self.write(repr_n.replace("inf", INFSTR))
+            self.addNextToken( t, repr_n.replace("inf", INFSTR) )
         else:
             # Parenthesize negative numbers, to avoid turning (-1)**2 into -1**2.
+            tokenText = ""
             if repr_n.startswith("-"):
                 self.write("(")
+                tokenText += "("
             if "inf" in repr_n and repr_n.endswith("*j"):
                 repr_n = repr_n.replace("*j", "j")
             # Substitute overflowing decimal literal for AST infinities.
             self.write(repr_n.replace("inf", INFSTR))
+            tokenText += repr_n.replace("inf", INFSTR)
             if repr_n.startswith("-"):
                 self.write(")")
+                tokenText += ")"
+            self.addNextToken( t, tokenText )
 
     def _List(self, t):
         self.write("[")
+        self.addNextToken( t, "list[" )
         interleave(lambda: self.write(", "), self.dispatch, t.elts)
         self.write("]")
 
     def _ListComp(self, t):
         self.write("[")
+        self.addNextToken( t, "ListComp[" )
         self.dispatch(t.elt)
         for gen in t.generators:
             self.dispatch(gen)
@@ -585,6 +677,7 @@ class Unparser:
 
     def _GeneratorExp(self, t):
         self.write("(")
+        self.addNextToken( t, "GeneratrExp(" )
         self.dispatch(t.elt)
         for gen in t.generators:
             self.dispatch(gen)
@@ -592,13 +685,15 @@ class Unparser:
 
     def _SetComp(self, t):
         self.write("{")
+        self.addNextToken( t, "SetComp{" )
         self.dispatch(t.elt)
         for gen in t.generators:
             self.dispatch(gen)
         self.write("}")
 
     def _DictComp(self, t):
-        self.write("{")
+        self.write("{") 
+        self.addNextToken( t, "DictComp{" )
         self.dispatch(t.key)
         self.write(": ")
         self.dispatch(t.value)
@@ -606,10 +701,12 @@ class Unparser:
             self.dispatch(gen)
         self.write("}")
 
+    # TODO: verify
     def _comprehension(self, t):
         if getattr(t, 'is_async', False):
             self.write(" async")
         self.write(" for ")
+        self.addNextToken( t, " for " )
         self.dispatch(t.target)
         self.write(" in ")
         self.dispatch(t.iter)
@@ -620,6 +717,7 @@ class Unparser:
     def _IfExp(self, t):
         self.write("(")
         self.dispatch(t.body)
+        self.addNextToken( t, " ifExp " )
         self.write(" if ")
         self.dispatch(t.test)
         self.write(" else ")
@@ -629,11 +727,13 @@ class Unparser:
     def _Set(self, t):
         assert(t.elts) # should be at least one element
         self.write("{")
+        self.addNextToken( t, "Set{" )
         interleave(lambda: self.write(", "), self.dispatch, t.elts)
         self.write("}")
 
     def _Dict(self, t):
         self.write("{")
+        self.addNextToken( t, "Dict{" )
         def write_pair(pair):
             (k, v) = pair
             if k is None:
@@ -652,6 +752,7 @@ class Unparser:
 
     def _Tuple(self, t):
         self.write("(")
+        self.addNextToken( t, "Tuple(" )
         if len(t.elts) == 1:
             (elt,) = t.elts
             self.dispatch(elt)
@@ -664,6 +765,7 @@ class Unparser:
     def _UnaryOp(self, t):
         self.write("(")
         self.write(self.unop[t.op.__class__.__name__])
+        self.addNextToken( t, self.unop[t.op.__class__.__name__] )
         self.write(" ")
         if six.PY2 and isinstance(t.op, ast.USub) and isinstance(t.operand, ast.Num):
             # If we're applying unary minus to a number, parenthesize the number.
@@ -686,6 +788,7 @@ class Unparser:
         self.write("(")
         self.dispatch(t.left)
         self.write(" " + self.binop[t.op.__class__.__name__] + " ")
+        self.addNextToken( t, " " + self.binop[t.op.__class__.__name__] + " " )
         self.dispatch(t.right)
         self.write(")")
 
@@ -696,13 +799,16 @@ class Unparser:
         self.dispatch(t.left)
         for o, e in zip(t.ops, t.comparators):
             self.write(" " + self.cmpops[o.__class__.__name__] + " ")
+            self.addNextToken( t, " "+ self.cmpops[o.__class__.__name__] + " " )
             self.dispatch(e)
         self.write(")")
 
+    # TODO: verify
     boolops = {ast.And: 'and', ast.Or: 'or'}
     def _BoolOp(self, t):
         self.write("(")
         s = " %s " % self.boolops[t.op.__class__]
+        self.addNextToken( t, s )
         interleave(lambda: self.write(s), self.dispatch, t.values)
         self.write(")")
 
@@ -715,8 +821,10 @@ class Unparser:
             self.write(" ")
         self.write(".")
         self.write(t.attr)
+        self.addNextToken( t, "." + t.attr )
 
     def _Call(self, t):
+        #self.addNextToken( t, t.func )
         self.dispatch(t.func)
         self.write("(")
         comma = False
@@ -833,6 +941,7 @@ class Unparser:
                     self.write(": ")
                     self.dispatch(t.kwargannotation)
 
+    # TODO: ?
     def _keyword(self, t):
         if t.arg is None:
             # starting from Python 3.5 this denotes a kwargs part of the invocation
@@ -843,27 +952,34 @@ class Unparser:
         self.dispatch(t.value)
 
     def _Lambda(self, t):
-        self.write("(")
-        self.write("lambda ")
+        #self.write("(")
+        #self.write("lambda ")
+        self.addNextToken( t, "lambda " ) 
         self.dispatch(t.args)
-        self.write(": ")
+        #self.write(": ")
         self.dispatch(t.body)
-        self.write(")")
+        #self.write(")")
 
+    # TODO: is this needed to add to next token list?
     def _alias(self, t):
+        text = t.name
         self.write(t.name)
         if t.asname:
+            text += " as " + t.asname
             self.write(" as "+t.asname)
+        return text
 
     def _withitem(self, t):
         self.dispatch(t.context_expr)
         if t.optional_vars:
             self.write(" as ")
+            self.addNextToken( t, " as " )
             self.dispatch(t.optional_vars)
 
     def _Await(self, t):
         self.write("(")
         self.write("await")
+        self.addNextToken( t, "await" )
         if t.value:
             self.write(" ")
             self.dispatch(t.value)

@@ -17,6 +17,7 @@ nodeToId = { tree : 0 }
 idToNode = { 0 : tree }
 nodeCount = 0
 queue = [ tree ]
+setattr( tree, 'nodeId', 0 )
 
 edges = []
 
@@ -33,6 +34,7 @@ while queue:
          # we are assuming each non-empty node is unique
          nodeCount += 1
          childId = nodeCount
+         setattr( child, 'nodeId', childId )
          nodeToId[ child ] = nodeCount
          idToNode[ nodeCount ] = child
          childTree[ node ].append( child )
@@ -77,10 +79,10 @@ for node in nodeToId:
       name += " ~"
    nodeNames.append( [ index, name ] )
 import pdb
-import astunparse
-source = astunparse.unparse(tree)
-pdb.set_trace()
+#import astunparse
+#source = astunparse.unparse(tree)
 
 from six.moves import cStringIO
 v = cStringIO()
-Unparser( tree, file=v )
+tokens = Unparser( tree, file=v )
+pdb.set_trace()
