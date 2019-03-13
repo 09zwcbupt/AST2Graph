@@ -9,6 +9,7 @@ class EdgeGenerator:
       self.path = path
       self.source = source
       self.loadAst( path, source )
+      setattr( self.tree, 'nodeId', 0 )
       # node object to children mapping
       self.childTree = {}
       # node object to number ID mapping
@@ -16,16 +17,22 @@ class EdgeGenerator:
       self.idToNode = { 0 : self.tree }
       self.nodeCount = 0
       self.queue = [ self.tree ]
-      self.edges = []
       self.nodeNames = []
       self.nextNode = []
-      setattr( self.tree, 'nodeId', 0 )
+
+      # parent<->child edges
+      self.edges = []
+
+      # var apperaed in code
+      self.varDict = {}
+      self.nonVarList = [ 'self', 'kw' ]
 
       # process edges
       self.genParentChildEdge()
       self.genIdToNodeNameList()
       self.tokenList = Unparser( self.tree ).tokenList
       self.genNextToken()
+      self.findAllVars()
    
    def loadAst( self, path, source ):
       if path:
@@ -109,16 +116,41 @@ class EdgeGenerator:
           cur = token.key.nodeId
           if cur != -1 and prev != -1:
              self.nextNode.append( [ prev, cur ] )
-         
+
+   def findAllVars( self ):
+      tmp = {}
+      for node in ast.walk( self.tree ):
+         if isinstance( node, ast.Name ):
+            if ( node.id not in self.varDict ) and \
+               ( node.id not in self.nonVarList ):
+               if (node.id[0]).isupper() or \
+                  (len(node.id)>2 and node.id.startswith("__")):
+                  self.nonVarList.append( node.id )
+               else:
+                  self.varDict[ node.id ] = getattr( self.varDict, node.id, [] ).append( node )
+
+         elif isinstance( node, ast.Import ):
+            for alias in node.names:
+               self.nonVarList.append( alias.name )
+
+         elif isinstance( node, ast.ImportFrom ):
+            for alias in node.names:
+               self.nonVarList.append( alias.name )
+
+         # class name is not var
+         # Instantiate a class could be treated as creating a new var
+         elif isinstance( node, ast.ClassDef ):
+            self.nonVarList.append( node.name )
+
+         elif isinstance( node, ast.FunctionDef ):
+            self.nonVarList.append( node.name )
+
+         else:
+            if type( node ) not in tmp:
+               tmp[type(node)] = True
+      print( tmp.keys() )
 
 if __name__ == "__main__":
    path = "../data/keras-example/AST/AST-bin-dump-keras-example_keras_tests_test_multiprocessing.py.ast"
    edges = EdgeGenerator( path )
-
-   import pdb
-   #import astunparse
-   #source = astunparse.unparse(tree)
-      
    pdb.set_trace()
-   #tokens = Unparser( edges.tree )
-   #pdb.set_trace()
