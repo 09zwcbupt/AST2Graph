@@ -1,88 +1,114 @@
 from unparser import Unparser
 import utils
+import pdb
 import ast
 
-def childCount( node ):
-   count = 0
-   for _ in ast.iter_child_nodes( node ):
-      count += 1
-   return count
+class EdgeGenerator:
+   def __init__( self, path="", source="" ):
+      # initial example
+      self.path = path
+      self.source = source
+      self.loadAst( path, source )
+      # node object to children mapping
+      self.childTree = {}
+      # node object to number ID mapping
+      self.nodeToId = { self.tree : 0 }
+      self.idToNode = { 0 : self.tree }
+      self.nodeCount = 0
+      self.queue = [ self.tree ]
+      self.edges = []
+      self.nodeNames = []
+      setattr( self.tree, 'nodeId', 0 )
+      
+      # process edges
+      self.genParentChildEdge()
+      self.genIdToNodeNameList()
+   
+   def loadAst( self, path, source ):
+      if path:
+         self.tree = utils.load( path )
+      elif source:
+         self.tree = ast.parse( source )
+      else:
+         assert False, "expecting source code or AST file"
+      assert self.tree
 
-# initial example
-tree = utils.load('../data/keras-example/AST/AST-bin-dump-keras-example_keras_tests_test_multiprocessing.py.ast')
-# node object to children mapping
-childTree = {}
-# node object to number ID mapping
-nodeToId = { tree : 0 }
-idToNode = { 0 : tree }
-nodeCount = 0
-queue = [ tree ]
-setattr( tree, 'nodeId', 0 )
+   def childCount( self, node ):
+      count = 0
+      for _ in ast.iter_child_nodes( node ):
+         count += 1
+      return count
 
-edges = []
+   def genParentChildEdge( self ):
+      while self.queue:
+         node = self.queue.pop( 0 )
+         if node not in self.childTree:
+            assert self.nodeCount in self.idToNode
+            assert node in self.idToNode.values()
+            parentId = self.nodeToId[ node ]
+            self.childTree[ node ] = []
+            # iterate all child nodes and add them in queue
+            childGen = ast.iter_child_nodes( node )
+            for child in childGen:
+               # we are assuming each non-empty node is unique
+               self.nodeCount += 1
+               childId = self.nodeCount
+               setattr( child, 'nodeId', childId )
+               self.nodeToId[ child ] = self.nodeCount
+               self.idToNode[ self.nodeCount ] = child
+               self.childTree[ node ].append( child )
+               self.queue.append( child )
 
-while queue:
-   node = queue.pop( 0 )
-   if node not in childTree:
-      assert nodeCount in idToNode
-      assert node in idToNode.values()
-      parentId = nodeToId[ node ]
-      childTree[ node ] = []
-      # iterate all child nodes and add them in queue
-      childGen = ast.iter_child_nodes( node )
-      for child in childGen:
-         # we are assuming each non-empty node is unique
-         nodeCount += 1
-         childId = nodeCount
-         setattr( child, 'nodeId', childId )
-         nodeToId[ child ] = nodeCount
-         idToNode[ nodeCount ] = child
-         childTree[ node ].append( child )
-         queue.append( child )
+               # generate parent -> child edge
+               self.edges.append( [ parentId, childId ] )
+         else:
+            assert not self.childCount( node ), "node should be in childTree"
 
-         # generate parent -> child edge
-         edges.append( [ parentId, childId ] )
-   else:
-      assert not childCount( node ), "node should be in childTree"
+   def genIdToNodeNameList( self ):
+      # generate id to node name list
+      for node in self.nodeToId:
+         index = self.nodeToId[ node ]
+         name = str( type( node ) )
 
-# generate id to node name list
-nodeNames = []
-for node in nodeToId:
-   index = nodeToId[ node ]
-   name = str( type( node ) )
+         # Variables
+         if isinstance( node, ast.Name ):
+            name += " " + node.id
+         elif isinstance( node, ast.Num ):
+            name += " " + str( node.n )
+         elif isinstance( node, ast.Str ) or \
+              isinstance( node, ast.Bytes ):
+            name += " " + node.s
 
-   # Variables
-   if isinstance( node, ast.Name ):
-      name += " " + node.id
-   elif isinstance( node, ast.Num ):
-      name += " " + str( node.n )
-   elif isinstance( node, ast.Str ) or \
-        isinstance( node, ast.Bytes ):
-      name += " " + node.s
+         # Expressions
+         elif isinstance( node, ast.UAdd ) or \
+              isinstance( node, ast.Add ):
+            name += " +"
+         elif isinstance( node, ast.USub ) or \
+              isinstance( node, ast.Sub ):
+            name += " -"
+         elif isinstance( node, ast.Mult ):
+            name += " *"
+         elif isinstance( node, ast.Div ):
+            name += " /"
+         elif isinstance( node, ast.FloorDiv ):
+            name += " FloorDiv"
+         elif isinstance( node, ast.Not ):
+            name += " !"
+         elif isinstance( node, ast.Invert ):
+            name += " ~"
+         self.nodeNames.append( [ index, name ] )
+ 
 
-   # Expressions
-   elif isinstance( node, ast.UAdd ) or \
-        isinstance( node, ast.Add ):
-      name += " +"
-   elif isinstance( node, ast.USub ) or \
-        isinstance( node, ast.Sub ):
-      name += " -"
-   elif isinstance( node, ast.Mult ):
-      name += " *"
-   elif isinstance( node, ast.Div ):
-      name += " /"
-   elif isinstance( node, ast.FloorDiv ):
-      name += " FloorDiv"
-   elif isinstance( node, ast.Not ):
-      name += " !"
-   elif isinstance( node, ast.Invert ):
-      name += " ~"
-   nodeNames.append( [ index, name ] )
-import pdb
-#import astunparse
-#source = astunparse.unparse(tree)
+if __name__ == "__main__":
+   path = "../data/keras-example/AST/AST-bin-dump-keras-example_keras_tests_test_multiprocessing.py.ast"
+   edges = EdgeGenerator( path )
 
-from six.moves import cStringIO
-v = cStringIO()
-tokens = Unparser( tree, file=v )
-pdb.set_trace()
+   import pdb
+   #import astunparse
+   #source = astunparse.unparse(tree)
+      
+   from six.moves import cStringIO
+   v = cStringIO()
+   pdb.set_trace()
+   tokens = Unparser( edges.tree, file=v )
+   pdb.set_trace()
