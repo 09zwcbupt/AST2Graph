@@ -48,16 +48,17 @@ class Unparser:
     output source code for the abstract syntax; original formatting
     is disregarded. """
 
-    def __init__(self, tree, file=sys.stdout):
+    def __init__(self, tree, file=open(os.devnull, 'w')):
         """Unparser(tree, file=sys.stdout) -> None.
          Print the source for tree to file."""
         # array, each elem is a separate entry
-        self.tokenLL = []
+        self.tokenList = []
         self.prevToken = None
 
         self.f = file
         self.future_imports = []
         self._indent = 0
+        self.curline = 0
         self.dispatch(tree)
         #print("", file=self.f)
         #self.f.flush()
@@ -69,8 +70,14 @@ class Unparser:
             self.prevToken.nextId = node.nodeId
             prevId = self.prevToken.key.nodeId
         # todo: how to check start/end of line?
-        nextToken = tokenElem( node, prevId, -1, text, node.col_offset, False, False )
-        self.tokenLL.append( nextToken )
+        offset = getattr( node, 'col_offset', -1 )
+        line = getattr( node, 'lineno', -1 )
+        newLine = False
+        if self.curline != line and line != -1:
+            newLine = True
+            self.curline = line
+        nextToken = tokenElem( node, prevId, -1, text, offset, newLine, False )
+        self.tokenList.append( nextToken )
         self.prevToken = nextToken
 
     def fill(self, text = ""):
@@ -127,9 +134,9 @@ class Unparser:
 
     def _Import(self, t):
         #self.fill( "import" )
-        self.addNextToken( t, "import" )
+        self.addNextToken( t, "import " )
         #pdb.set_trace()
-        interleave(lambda: ", ", self.dispatch, t.names)
+        interleave(lambda: self.write(", "), self.dispatch, t.names)
 
     def _ImportFrom(self, t):
         # A from __future__ import may affect unparsing, so record it.
@@ -233,7 +240,7 @@ class Unparser:
 
     def _Print(self, t):
         #self.fill("print ")
-        self.addNextToken( t, "print " )
+        self.addNextToken( t, "print" )
         do_comma = False
         if t.dest:
             self.write(">>")
@@ -374,7 +381,7 @@ class Unparser:
             self.fill("@")
             self.dispatch(deco)
         self.fill("class "+t.name)
-        self.addNextToken( t, "class" )
+        self.addNextToken( t, "class " + t.name + ":" )
         if six.PY3:
             self.write("(")
             comma = False
@@ -418,6 +425,8 @@ class Unparser:
         self.addNextToken( t, tokenText )
         self.dispatch(t.args)
         self.write(")")
+        # TODO: [extra edges] do we need this?
+        self.addNextToken( t, "):" )
         if getattr(t, "returns", False):
             self.write(" -> ")
             self.dispatch(t.returns)
@@ -436,13 +445,19 @@ class Unparser:
         tokenText = "async for " if async_ else "for "
         self.addNextToken( t, tokenText )
         self.dispatch(t.target)
+        # TODO: [extra edge] do we need this?
+        self.addNextToken( t, " in " )
         self.write(" in ")
         self.dispatch(t.iter)
+        # TODO: [extra edge] do we need this?
+        self.addNextToken( t, ":" )
         self.enter()
         self.dispatch(t.body)
         self.leave()
         if t.orelse:
             self.fill("else")
+            # TODO: [extra edge] do we need this?
+            self.addNextToken( t, "else" )
             self.enter()
             self.dispatch(t.orelse)
             self.leave()
@@ -457,6 +472,8 @@ class Unparser:
         #self.fill("if ")
         self.addNextToken( t, "if " )
         self.dispatch(t.test)
+        # TODO: [extra edge] do we need this?
+        self.addNextToken( t, ":" )
         self.enter()
         self.dispatch(t.body)
         self.leave()
@@ -466,12 +483,14 @@ class Unparser:
             t = t.orelse[0]
             self.fill("elif ")
             self.dispatch(t.test)
+            # TODO: [extra edge] do we need this?
+            self.addNextToken( t, ":" )
             self.enter()
             self.dispatch(t.body)
             self.leave()
         # final else
         if t.orelse:
-            self.fill("else")
+            self.fill("else:")
             self.enter()
             self.dispatch(t.orelse)
             self.leave()
@@ -824,8 +843,8 @@ class Unparser:
         self.addNextToken( t, "." + t.attr )
 
     def _Call(self, t):
-        #self.addNextToken( t, t.func )
         self.dispatch(t.func)
+        self.addNextToken( t, "(" )
         self.write("(")
         comma = False
         for e in t.args:
@@ -847,6 +866,7 @@ class Unparser:
                 else: comma = True
                 self.write("**")
                 self.dispatch(t.kwargs)
+        self.addNextToken( t, ")" )
         self.write(")")
 
     def _Subscript(self, t):
@@ -882,6 +902,7 @@ class Unparser:
     # argument
     def _arg(self, t):
         self.write(t.arg)
+        self.addNextToken( t, t.arg )
         if t.annotation:
             self.write(": ")
             self.dispatch(t.annotation)
@@ -892,17 +913,24 @@ class Unparser:
         # normal arguments
         defaults = [None] * (len(t.args) - len(t.defaults)) + t.defaults
         for a,d in zip(t.args, defaults):
-            if first:first = False
-            else: self.write(", ")
+            if first:
+                first = False
+            else:
+                self.write(", ")
+                self.addNextToken( t, ", " )
             self.dispatch(a)
             if d:
                 self.write("=")
+                self.addNextToken( t, "=" )
                 self.dispatch(d)
 
         # varargs, or bare '*' if no varargs but keyword-only arguments present
         if t.vararg or getattr(t, "kwonlyargs", False):
-            if first: first = False
-            else: self.write(", ")
+            if first:
+                first = False
+            else:
+                self.write(", ")
+                #self.addNextToken( t, ", " )
             self.write("*")
             if t.vararg:
                 if hasattr(t.vararg, 'arg'):
@@ -967,7 +995,7 @@ class Unparser:
         if t.asname:
             text += " as " + t.asname
             self.write(" as "+t.asname)
-        return text
+        self.addNextToken( t, text )
 
     def _withitem(self, t):
         self.dispatch(t.context_expr)

@@ -19,10 +19,14 @@ class EdgeGenerator:
       self.edges = []
       self.nodeNames = []
       setattr( self.tree, 'nodeId', 0 )
+
+      # helper var
+      self.lineNu = 0
       
       # process edges
       self.genParentChildEdge()
       self.genIdToNodeNameList()
+      self.tokenList = Unparser( self.tree )
    
    def loadAst( self, path, source ):
       if path:
