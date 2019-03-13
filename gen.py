@@ -1,5 +1,8 @@
 from unparser import Unparser
+import traceback
 import utils
+import json
+import sys
 import pdb
 import ast
 
@@ -26,13 +29,16 @@ class EdgeGenerator:
       # var apperaed in code
       self.varDict = {}
       self.nonVarList = [ 'self', 'kw' ]
+      self.varContext = {}
 
       # process edges
       self.genParentChildEdge()
       self.genIdToNodeNameList()
       self.tokenList = Unparser( self.tree ).tokenList
       self.genNextToken()
+      # generate var context
       self.findAllVars()
+      self.genVarContext()
    
    def loadAst( self, path, source ):
       if path:
@@ -73,7 +79,8 @@ class EdgeGenerator:
                self.edges.append( [ parentId, childId ] )
          else:
             assert not self.childCount( node ), "node should be in childTree"
-
+   
+   # TODO: name should be consistant
    def genIdToNodeNameList( self ):
       # generate id to node name list
       for node in self.nodeToId:
@@ -117,6 +124,8 @@ class EdgeGenerator:
           if cur != -1 and prev != -1:
              self.nextNode.append( [ prev, cur ] )
 
+   # TODO: walk is using BFS, which is not the right way
+   # to recursively walk through AST trees
    def findAllVars( self ):
       tmp = {}
       for node in ast.walk( self.tree ):
@@ -146,11 +155,87 @@ class EdgeGenerator:
             self.nonVarList.append( node.name )
 
          else:
-            if type( node ) not in tmp:
-               tmp[type(node)] = True
-      print( tmp.keys() )
+            pass
+
+   # this function depends on self.findAllVars
+   def genVarContext( self ):
+      for idx, node in enumerate( self.tokenList ):
+          if isinstance( node.key, ast.Name ) and \
+             node.key.id in self.varDict and \
+             ( idx > 10 and idx < len( self.tokenList ) - 11 ):
+             #print( idx, node.key.id, node.key.id in self.varDict)
+             left = self.tokenList[ idx-10: idx ]
+             right = self.tokenList[ idx+1: idx +11 ]
+             if node.key.id in self.varContext:
+                self.varContext[ node.key.id ] += [ [ node.key, left, right ] ]
+             else:
+                self.varContext[ node.key.id ] = [ [ node.key, left, right ] ]
+
+   def genJsonNodeLabels( self ):
+      data = {}
+      for name in self.nodeNames:
+         data[ str( name[ 0 ] ) ] = name[ 1 ]
+      return data
+
+   def genJsonContext( self ):
+      data = []
+      for name in self.varContext:
+          occurs = self.varContext[ name ]
+          varData = {}
+          varData[ "NodeId" ] = occurs[0][0].nodeId
+          varData[ "Name" ] = name
+          varData[ "TokenContexts" ] = []
+          for occur in occurs:
+             occurList = [ [], [] ]
+             for token in occur[ 1 ]: # left
+                occurList[ 0 ].append( [ token.text, str( type( token.key ) ) ] )
+             for token in occur[ 2 ]: # right
+                occurList[ 1 ].append( [ token.text, str( type( token.key ) ) ] )
+             varData[ "TokenContexts" ].append( occurList )
+          data.append( varData )
+      return data
+
+   def genJsonData( self ):
+      data = {
+         "Filename" : "dummyFile.py",
+         "HoleSpan" : "",
+         "HoleLineSpan" : "",
+         "ContextGraph" : {
+            "Edges" : {
+               "Child" : self.edges,
+               "NextToken" : self.nextNode,
+               "LastUse" : [],
+               "LastWrite" : [],
+               "LastLexicalUse" : []
+            },
+            "EdgeValues" : {
+               "LastUse" : [],
+               "LastWrite" : [],
+               "LastLexicalUse" : [],
+            },
+            "NodeLabels" : self.genJsonNodeLabels(),
+            "NodeTypes" : {
+            }
+         },
+         #"HoleNode" : 0,
+         #"LastTokenBeforeHole" : 0,
+         "LastUseOfVariablesInScope" : {},
+         "Productions" : {},
+         "SimbolKinds" : {},
+         "SymbolLabels" : {},
+         "HoleTokensBefore" : [],
+         "HoleTokensAfter" : [],
+         "VariableUsageContexts" : self.genJsonContext()
+      }
+      return data
+
+   def writeFile( self, path ):
+      with open( path, 'w' ) as jsonFile:
+         data = self.genJsonData()
+         json.dump( data, jsonFile )
 
 if __name__ == "__main__":
    path = "../data/keras-example/AST/AST-bin-dump-keras-example_keras_tests_test_multiprocessing.py.ast"
    edges = EdgeGenerator( path )
+   edges.writeFile( './data.json' )
    pdb.set_trace()
