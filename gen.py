@@ -217,11 +217,11 @@ class EdgeGenerator:
             "NodeTypes" : {
             }
          },
-         #"HoleNode" : 0,
-         #"LastTokenBeforeHole" : 0,
+         "HoleNode" : 0,
+         "LastTokenBeforeHole" : 0,
          "LastUseOfVariablesInScope" : {},
          "Productions" : {},
-         "SimbolKinds" : {},
+         "SymbolKinds" : {},
          "SymbolLabels" : {},
          "HoleTokensBefore" : [],
          "HoleTokensAfter" : [],
