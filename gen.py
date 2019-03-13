@@ -18,15 +18,14 @@ class EdgeGenerator:
       self.queue = [ self.tree ]
       self.edges = []
       self.nodeNames = []
+      self.nextNode = []
       setattr( self.tree, 'nodeId', 0 )
 
-      # helper var
-      self.lineNu = 0
-      
       # process edges
       self.genParentChildEdge()
       self.genIdToNodeNameList()
-      self.tokenList = Unparser( self.tree )
+      self.tokenList = Unparser( self.tree ).tokenList
+      self.genNextToken()
    
    def loadAst( self, path, source ):
       if path:
@@ -102,6 +101,15 @@ class EdgeGenerator:
             name += " ~"
          self.nodeNames.append( [ index, name ] )
  
+   def genNextToken( self ):
+      cur = -1
+      prev = -1
+      for token in self.tokenList:
+          prev = cur
+          cur = token.key.nodeId
+          if cur != -1 and prev != -1:
+             self.nextNode.append( [ prev, cur ] )
+         
 
 if __name__ == "__main__":
    path = "../data/keras-example/AST/AST-bin-dump-keras-example_keras_tests_test_multiprocessing.py.ast"
@@ -111,8 +119,6 @@ if __name__ == "__main__":
    #import astunparse
    #source = astunparse.unparse(tree)
       
-   from six.moves import cStringIO
-   v = cStringIO()
    pdb.set_trace()
-   tokens = Unparser( edges.tree, file=v )
-   pdb.set_trace()
+   #tokens = Unparser( edges.tree )
+   #pdb.set_trace()
