@@ -5,6 +5,7 @@ import json
 import sys
 import pdb
 import ast
+import os
 
 class EdgeGenerator:
    def __init__( self, path="", source="" ):
@@ -99,7 +100,7 @@ class EdgeGenerator:
             name += " " + str( node.n )
          elif isinstance( node, ast.Str ) or \
               isinstance( node, ast.Bytes ):
-            name += " " + node.s
+            name += " " + str( node.s )
 
          # Expressions
          elif isinstance( node, ast.UAdd ) or \
@@ -256,7 +257,7 @@ class EdgeGenerator:
       return data
 
    def writeFile( self, path ):
-      with open( path, 'w' ) as jsonFile:
+      with open( path, 'a' ) as jsonFile:
          data = self.genJsonData()
          json.dump( data, jsonFile )
 
@@ -264,7 +265,15 @@ if __name__ == "__main__":
    #path = "../data/keras-example/AST/AST-bin-dump-keras-example_keras_tests_test_multiprocessing.py.ast"
    # minimal file
    #path = "../data/keras-example/AST/AST-bin-dump-keras-example_keras_keras_preprocessing_text.py.ast"
-   path = "../data/keras-example/AST/AST-bin-dump-keras-example_keras_tests_keras_test_callbacks.py.ast"
-   edges = EdgeGenerator( path )
-   edges.writeFile( './data.json' )
+   #path = "../data/keras-example/AST/AST-bin-dump-keras-example_keras_tests_keras_test_callbacks.py.ast"
+   directory = "../data/keras-example/AST/"
+   count = 0
+   for filename in os.listdir( directory ):
+      count += 1
+      if count == 2:
+         break
+      if filename.endswith(".ast"):
+        print( "handling: ", directory + filename )
+        edges = EdgeGenerator( directory + filename )
+        edges.writeFile( './data.json' )
    pdb.set_trace()
