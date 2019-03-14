@@ -38,6 +38,7 @@ class EdgeGenerator:
       self.genNextToken()
       # generate var context
       self.findAllVars()
+      print( "variable:", self.varDict.keys() )
       self.genVarContext()
    
    def loadAst( self, path, source ):
@@ -67,13 +68,17 @@ class EdgeGenerator:
             childGen = ast.iter_child_nodes( node )
             for child in childGen:
                # we are assuming each non-empty node is unique
-               self.nodeCount += 1
-               childId = self.nodeCount
-               setattr( child, 'nodeId', childId )
-               self.nodeToId[ child ] = self.nodeCount
-               self.idToNode[ self.nodeCount ] = child
+               if child in self.nodeToId:
+                  childId = self.nodeToId[ child ]
+               else:
+                  # only register new node when we haven't walk over it
+                  self.nodeCount += 1
+                  childId = self.nodeCount
+                  self.idToNode[ self.nodeCount ] = child
+                  setattr( child, 'nodeId', childId )
+                  self.nodeToId[ child ] = self.nodeCount
+                  self.queue.append( child )
                self.childTree[ node ].append( child )
-               self.queue.append( child )
 
                # generate parent -> child edge
                self.edges.append( [ parentId, childId ] )
@@ -136,7 +141,10 @@ class EdgeGenerator:
                   (len(node.id)>2 and node.id.startswith("__")):
                   self.nonVarList.append( node.id )
                else:
-                  self.varDict[ node.id ] = getattr( self.varDict, node.id, [] ).append( node )
+                  if node.id in self.varDict:
+                     self.varDict[ node.id ].append( node )
+                  else:
+                     self.varDict[ node.id ] = [ node ]
 
          elif isinstance( node, ast.Import ):
             for alias in node.names:
@@ -204,14 +212,14 @@ class EdgeGenerator:
             "Edges" : {
                "Child" : self.edges,
                "NextToken" : self.nextNode,
-               "LastUse" : [],
-               "LastWrite" : [],
-               "LastLexicalUse" : []
+               #"LastUse" : [],
+               #"LastWrite" : [],
+               #"LastLexicalUse" : []
             },
             "EdgeValues" : {
-               "LastUse" : [],
-               "LastWrite" : [],
-               "LastLexicalUse" : [],
+               #"LastUse" : [],
+               #"LastWrite" : [],
+               #"LastLexicalUse" : [],
             },
             "NodeLabels" : self.genJsonNodeLabels(),
             "NodeTypes" : {
@@ -219,10 +227,28 @@ class EdgeGenerator:
          },
          "HoleNode" : 0,
          "LastTokenBeforeHole" : 0,
-         "LastUseOfVariablesInScope" : {},
-         "Productions" : {},
-         "SymbolKinds" : {},
-         "SymbolLabels" : {},
+         "LastUseOfVariablesInScope" : {
+            "j": 35,
+            "i": 36
+         },
+         "Productions" : {
+            "1": [ 2, 4, 5 ],
+            "2": [ 3 ],
+            "5": [ 6 ]
+         },
+         "SymbolKinds" : {
+            "1": "Expression",
+            "2": "Expression",
+            "4": "Token",
+            "5": "Expression",
+            "3": "Variable",
+            "6": "Variable"
+         },
+         "SymbolLabels" : {
+            "4": "+",
+            "3": "i",
+            "6": "j"
+         },
          "HoleTokensBefore" : [],
          "HoleTokensAfter" : [],
          "VariableUsageContexts" : self.genJsonContext()
@@ -235,7 +261,10 @@ class EdgeGenerator:
          json.dump( data, jsonFile )
 
 if __name__ == "__main__":
-   path = "../data/keras-example/AST/AST-bin-dump-keras-example_keras_tests_test_multiprocessing.py.ast"
+   #path = "../data/keras-example/AST/AST-bin-dump-keras-example_keras_tests_test_multiprocessing.py.ast"
+   # minimal file
+   #path = "../data/keras-example/AST/AST-bin-dump-keras-example_keras_keras_preprocessing_text.py.ast"
+   path = "../data/keras-example/AST/AST-bin-dump-keras-example_keras_tests_keras_test_callbacks.py.ast"
    edges = EdgeGenerator( path )
    edges.writeFile( './data.json' )
    pdb.set_trace()

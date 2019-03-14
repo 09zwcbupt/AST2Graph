@@ -173,7 +173,7 @@ class Unparser:
         #self.write(" "+self.binop[t.op.__class__.__name__]+"= ")
         tokenText = " "+self.binop[t.op.__class__.__name__]+"= " 
         self.addNextToken( t, tokenText )
-        tokenText += self.dispatch(t.value)
+        self.dispatch(t.value)
 
     def _AnnAssign(self, t):
         #self.fill()
@@ -191,7 +191,7 @@ class Unparser:
         self.addNextToken( t, "=" )
         if t.value:
             #self.write(" = ")
-            tokenText += sef.dispatch(t.value)
+            sef.dispatch(t.value)
 
     def _Return(self, t):
         #self.fill("return")
