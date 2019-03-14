@@ -257,7 +257,7 @@ class EdgeGenerator:
       return data
 
    def writeFile( self, path ):
-      with open( path, 'a' ) as jsonFile:
+      with open( path, 'w' ) as jsonFile:
          data = self.genJsonData()
          json.dump( data, jsonFile )
 
@@ -267,13 +267,9 @@ if __name__ == "__main__":
    #path = "../data/keras-example/AST/AST-bin-dump-keras-example_keras_keras_preprocessing_text.py.ast"
    #path = "../data/keras-example/AST/AST-bin-dump-keras-example_keras_tests_keras_test_callbacks.py.ast"
    directory = "../data/keras-example/AST/"
-   count = 0
    for filename in os.listdir( directory ):
-      count += 1
-      if count == 2:
-         break
       if filename.endswith(".ast"):
         print( "handling: ", directory + filename )
         edges = EdgeGenerator( directory + filename )
-        edges.writeFile( './data.json' )
+        edges.writeFile( './json/' + filename + '.jsonl' )
    pdb.set_trace()
