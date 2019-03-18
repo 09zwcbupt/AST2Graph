@@ -1,5 +1,6 @@
 from unparser import Unparser
 import traceback
+import keyword
 import utils
 import json
 import sys
@@ -28,9 +29,11 @@ class EdgeGenerator:
       self.edges = []
 
       # var apperaed in code
+      # var name to AST node list mapping
       self.varDict = {}
-      self.nonVarList = [ 'self', 'kw' ]
+      self.nonVarList = [ 'self', 'kw', '_', 'kwargs', 'str', 'len' ] + keyword.kwlist
       self.varContext = {}
+      self.varOccur = {}
 
       # process edges
       self.genParentChildEdge()
@@ -133,17 +136,17 @@ class EdgeGenerator:
    # TODO: walk is using BFS, which is not the right way
    # to recursively walk through AST trees
    def findAllVars( self ):
-      tmp = {}
       for node in ast.walk( self.tree ):
          if isinstance( node, ast.Name ):
-            if ( node.id not in self.varDict ) and \
-               ( node.id not in self.nonVarList ):
+            if node.id not in self.nonVarList:
                if (node.id[0]).isupper() or \
                   (len(node.id)>2 and node.id.startswith("__")):
                   self.nonVarList.append( node.id )
                else:
+                  # id is the var name
                   if node.id in self.varDict:
                      self.varDict[ node.id ].append( node )
+                     #print( node.id, len(self.varDict[ node.id ]))
                   else:
                      self.varDict[ node.id ] = [ node ]
 
@@ -179,6 +182,16 @@ class EdgeGenerator:
                 self.varContext[ node.key.id ] += [ [ node.key, left, right ] ]
              else:
                 self.varContext[ node.key.id ] = [ [ node.key, left, right ] ]
+
+   def getJsonVarOccurence( self ):
+      data = {}
+      for name in self.varDict:
+          #print( len( self.varDict[ name ] ) )
+          if len( self.varDict[ name ] ) == 1:
+             # if it only occured once, ignore
+             continue
+          data[ name ] = [ node.nodeId for node in self.varDict[ name ] ]
+      return data
 
    def genJsonNodeLabels( self ):
       data = {}
@@ -252,7 +265,8 @@ class EdgeGenerator:
          },
          "HoleTokensBefore" : [],
          "HoleTokensAfter" : [],
-         "VariableUsageContexts" : self.genJsonContext()
+         "VariableUsageContexts" : self.genJsonContext(),
+         "VariableOccurence" : self.getJsonVarOccurence()
       }
       return data
 
