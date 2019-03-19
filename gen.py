@@ -8,6 +8,11 @@ import pdb
 import ast
 import os
 
+NON_VAR = [ 'object', 'self', 'kw', '_', 'kwargs', 'str', 'len', 'int', 'enumerate',
+           'min', 'max', 'list', 'dict', 'range', 'print', 'float', 'type', 'hasattr',
+           'np', 'tf', 'map', 'getattr', 'setattr', 'isinstance', 'char', 'set',
+           'super', 'callable', 'sorted' ]
+
 class EdgeGenerator:
    def __init__( self, path="", source="" ):
       # initial example
@@ -31,7 +36,7 @@ class EdgeGenerator:
       # var apperaed in code
       # var name to AST node list mapping
       self.varDict = {}
-      self.nonVarList = [ 'self', 'kw', '_', 'kwargs', 'str', 'len' ] + keyword.kwlist
+      self.nonVarList = keyword.kwlist + NON_VAR
       self.varContext = {}
       self.varOccur = {}
 
@@ -190,7 +195,14 @@ class EdgeGenerator:
           if len( self.varDict[ name ] ) == 1:
              # if it only occured once, ignore
              continue
-          data[ name ] = [ node.nodeId for node in self.varDict[ name ] ]
+          # we only consider when we are reading variable
+          useCase = []
+          for node in self.varDict[ name ]:
+              if isinstance( node.ctx, ast.Load ):
+                  useCase.append( node.nodeId )
+          if len( useCase ):
+             #print( name )
+             data[ name ] = useCase
       return data
 
    def genJsonNodeLabels( self ):
