@@ -6,7 +6,7 @@ import ast
 import os
 import tokenize
 from six import StringIO
-import pdb
+#import pdb
 
 # Large float and imaginary literals get turned into infinities in the AST.
 # We unparse those infinities to INFSTR.
@@ -181,17 +181,21 @@ class Unparser:
         if not t.simple:
             tokenText += "("
             #self.write("(")
-        tokenText += self.dispatch(t.target)
+        ret = self.dispatch(t.target)
+        if ret:
+            tokenText += ret
         if not t.simple:
             tokenText += ")"
             #self.write(")")
         #self.write(": ")
         tokenText += ": "
-        tokenText += self.dispatch(t.annotation)
+        ret = self.dispatch(t.annotation)
+        if ret:
+           tokenText += ret
         self.addNextToken( t, "=" )
         if t.value:
             #self.write(" = ")
-            sef.dispatch(t.value)
+            self.dispatch(t.value)
 
     def _Return(self, t):
         #self.fill("return")
